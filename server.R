@@ -3,9 +3,32 @@ library(RColorBrewer)
 library(scales)
 library(lattice)
 library(dplyr)
+library(xlsx)
+library(glue)
+library(shinydashboard)
+library(data.table)
+library(DT)
 
 coded_text <- character(0)
 
+highlight <- '
+                function getSelectionText() {
+var text = "";
+if (window.getSelection) {
+text = window.getSelection().toString();
+} else if (document.selection) {
+text = document.selection.createRange().text;
+}
+return text;
+}
+
+document.onmouseup = document.onkeyup = document.onselectionchange = function() {
+var selection = getSelectionText();
+Shiny.onInputChange("mydata", selection);
+};
+'
+
+#######################################################
 
 # Leaflet bindings are a bit slow; for now we'll just sample to compensate
 set.seed(100)
@@ -14,13 +37,7 @@ zipdata <- df_loc[sample.int(nrow(df_loc), 1000),]
 # will be drawn last and thus be easier to see
 zipdata <- zipdata[order(zipdata$Frequence),]
 
-###########################################################
-highlight <- function(text, search) {
-  x <- unlist(strsplit(text, split = " ", fixed = T))
-  x[tolower(x) == tolower(search)] <- paste0("<mark>", x[tolower(x) == tolower(search)], "</mark>")
-  paste(x, collapse = " ")
-}
-###########################################################
+temp = c('') 
 
 function(input, output, session) {
 
@@ -129,23 +146,23 @@ function(input, output, session) {
   
   ## Data Explorer ###########################################
   
-  output$ziptable <- DT::renderDataTable({
+  output$ziptable <-  renderDataTable({
     df <- cleantable %>%
       filter(
         Frequence >= input$minScore,
         Frequence <= input$maxScore
       )#%>%
     #  mutate(Action = paste('<a class="go-map" href="" data-lat="', Latitude, '" data-long="', Longitude, '"><i class="fa fa-crosshairs"></i></a>', sep=""))
-    #action <- DT::dataTableAjax(session, df, outputId = "ziptable")
+    #action <-  dataTableAjax(session, df, outputId = "ziptable")
     
-    #DT::datatable(df, options = list(ajax = list(url = action)), escape = FALSE)
+    # datatable(df, options = list(ajax = list(url = action)), escape = FALSE)
   })
   
   ## Print Explorer ###########################################
   
   # autocomple
   observe({
-  updateSelectInput(session, 'search1', selected = input$search)
+    updateSelectInput(session, 'search1', selected = input$search)
   }) 
   observe({
     updateSelectInput(session, 'search', selected = input$search1)
@@ -154,27 +171,172 @@ function(input, output, session) {
   #output$text1 <- renderText({ paste("hello input is","<font color=\"#FF0000\"><b>", 'input$n', "</b></font>") })
   
   #Print Table info
-  output$imagetest <- DT::renderDataTable({
-    DT::datatable(dat, escape = FALSE,
+  output$imagetest <-  renderDataTable({
+     datatable(dat, escape = FALSE, #rownames=FALSE,
                   options = list(searchHighlight = TRUE, search = list(search = input$search)))
   }) 
   
-  ## Prints Tagging ###########################################
+  ## Reannotate Prints ###########################################
   
-  coded <- eventReactive(input$code1, {
-    coded_text <<- c(coded_text, input$mydata)
-    coded_text
+  # Initialize reactive values
+  rv <- reactiveValues(prev_bins = NULL)
+  
+  # Append new value to previous values when checkbox changes 
+  observeEvent(input$checked_rows, {
+    temp <- c(rv$prev_bins, input$checked_rows)
+    rv$prev_bins <- temp[!duplicated(temp)]
+    rv$prev_bins <- sort(rv$prev_bins)
   })
   
-  output$selected_text <- renderPrint({
-    coded()
+  # Output
+  output$value1 <- renderText({
+    paste(rv$prev_bins, collapse = ",")
   })
 
+  
+  #output$value1 <- renderPrint({input$checked_rows})
+  
+  # Save the ids of wrong labels of print when press button save 
+  observeEvent(input$save, {
+    write.xlsx(rv$prev_bins, "wrong_ids_labels.xlsx")
+  })
+  
+  
   #Print Table info
-  output$imagetag <- DT::renderDataTable({
-    DT::datatable(dat, escape = FALSE,
-                  options = list(searchHighlight = TRUE, search = list(search = input$search)))
+  output$tablereann <-  renderDataTable({
+    
+    dat[["Select False"]]<-glue::glue('<input type="checkbox" name="selected" value="{1:nrow(dat)}"><br>')
+     datatable(dat,escape=FALSE,  #class = 'cell-border compact', #rownames=FALSE,
+              options=list(ordering=T,autowidth=F,scrollX = TRUE,
+                           columnDefs = list(list(className = 'dt-center', targets = "_all"))
+              ),
+              selection="none"
+    )
+
   }) 
   
+  
+  ## Reannotate Explorer ###########################################
+  
+  output$MainBody<-renderUI({
+    fluidPage(
+      box(width=12,
+          h3(strong("Reannotate ukiyo-e titles"),align="center"),
+          hr(),
+          
+          column(12,dataTableOutput("Main_table")),
+
+          tags$script("$(document).on('click', '#Main_table button', function () {
+                    Shiny.onInputChange('lastClickId',this.id);
+                    Shiny.onInputChange('lastClick', Math.random())
+  });")
+          
+      )
+    )
+  })
+  
+  
+  output$Main_table<-renderDataTable({
+    DT=dat
+    
+    #DT[["Select"]]<-paste0('<input type="checkbox" name="row_selected" value="Row',1:nrow(vals$Data),'"><br>')
+    
+    DT[["Actions"]]<-
+      paste0('
+             <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="button" class="btn btn-secondary modify"id=modify_',1:nrow(dat),'>Modify</button>
+             </div>
+             
+             ')
+    datatable(DT,
+              escape=F)}
+  )
+  
+## A] Managing in row deletion <-------
+  
+  modal_modify<-modalDialog(
+    fluidPage(
+      
+      h3(strong("Labeling modification"),align="center"),
+      hr(),
+      uiOutput('row_modif', align="center"),
+      
+      br(), br(),
+      
+      sidebarLayout(
+        sidebarPanel(
+          textInput("txtInput", "Input the place"),
+          actionButton("store", "Store")
+        ),                                          
+        uiOutput("valuePlace"),
+      ),
+      
+      actionButton("save_changes","Save changes"),
+
+        
+      #############################################################
+
+      #      dataTableOutput('row_modif'),
+
+      
+      #      tags$script(HTML("$(document).on('click', '#save_changes', function () {
+      #var list_value=[]
+      #for (i = 0; i < $( '.new_input' ).length; i++)
+      #                       {
+      #                          list_value.push($( '.new_input' )[i].value)
+      #                       }
+      #Shiny.onInputChange('newValue', list_value)
+      #  });"))
+      #############################################################
+
+
+    ),
+    size="l"
+  )
+  
+  
+### Table auto complete from user Input with button Store  ###
+  
+  observeEvent(input$lastClick,
+               {
+                 if (input$lastClickId%like%"modify"){
+                   showModal(modal_modify)
+                 }
+               }
+  )
+
+  
+### Print Title with the tags from the row we press button  ###
+  
+  output$row_modif<-renderUI({  
+    HTML(dat$Marked[as.numeric(gsub("modify_","",input$lastClickId))])
+  })
+  
+  
+#########################################
+  
+  # Initialize reactive values
+  rv2 <- reactiveValues(prev_bins = NULL)
+  
+  # Press store
+  observeEvent(input$store, {
+    temp <- c(rv2$prev_bins, input$txtInput)
+    rv2$prev_bins <- temp[!duplicated(temp)]
+  })
+  
+  # Output
+  output$valuePlace <- renderUI({ 
+    paste(rv2$prev_bins, collapse = ", ")
+  })
+  
+  
+  #output$value1 <- renderPrint({input$checked_rows})
+  
+  # Save the ids of wrong labels of print when press button save 
+  observeEvent(input$save_changes, {
+    write.xlsx(rv2$prev_bins, "wrong_labels.xlsx")
+  })
+  
+
   
 }

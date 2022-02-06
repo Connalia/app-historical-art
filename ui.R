@@ -1,23 +1,5 @@
 library(leaflet)
-
-highlight <- '
-                function getSelectionText() {
-var text = "";
-if (window.getSelection) {
-text = window.getSelection().toString();
-} else if (document.selection) {
-text = document.selection.createRange().text;
-}
-return text;
-}
-
-document.onmouseup = document.onkeyup = document.onselectionchange = function() {
-var selection = getSelectionText();
-Shiny.onInputChange("mydata", selection);
-};
-'
-
-#######################################################
+library(shinydashboard)
 
 # Choices for drop-downs
 vars <- c(
@@ -27,6 +9,7 @@ vars <- c(
 
 
 navbarPage("Ukiyo-e Prints", id="nav",
+           
 
   tabPanel("Interactive map",
     div(class="outer",
@@ -69,7 +52,7 @@ navbarPage("Ukiyo-e Prints", id="nav",
     )
   ),
 
-  tabPanel("Locations explorer",
+  tabPanel("Location explorer",
   
     fluidRow(
       column(3,
@@ -112,28 +95,93 @@ navbarPage("Ukiyo-e Prints", id="nav",
            
   ),
   
-  tabPanel("Prints tagging",
+  tabPanel("Check Prints",
            
            
            fluidPage(
-             
              # Application title
-             #titlePanel("Tagging"),
+             #titlePanel("Ukiyo-e Prints Informations"),
              
-             tags$script(highlight),
-             tags$h1("Coding options"),
-             actionButton("code1", "Assign selected text"),
-             tags$h1("Code1 output"),
-             verbatimTextOutput("selected_text"),
+             h4("Select title with the wrong annotation (check the box):"), 
+             
+             #verbatimTextOutput("checked_rows"),
+             verbatimTextOutput("value1"),
+             #textInput("inText", "Wrong print ids"),
+             #textOutput("text"),
+             
+             h4("When you finish save your work (press the save button):"), 
+             
+             actionButton("save", "Save wrongs"),
+             
+             br(),
+             br(),
+             
+             column(12,
+                    DT::dataTableOutput("tablereann"),  tags$script(HTML('$(document).on("click", "input", 
+                                                          function () {
+                                                             var checkboxes = document.getElementsByName("selected");
+                                                             var checkboxesChecked = [];
+                                                             for (var i=0; i<checkboxes.length; i++) {
+                                                                if (checkboxes[i].checked) {
+                                                                    checkboxesChecked.push(checkboxes[i].value);
+                                                                  }
+                                                             }
+                                                             Shiny.onInputChange("checked_rows",checkboxesChecked);  
+                                                           })'))
+             ),
              
              
-             #mainPanel(
-             DT::dataTableOutput("imagetag")#, href=dat$infolink, target="_blank")
-             #)
+             
+             
+           )
+           
+           
+  ),
+  
+  #################################
+  
+  tabPanel("Reannotate Prints",
+           
+           dashboardPage(dashboardHeader(disable = T),
+                         dashboardSidebar(disable = T),
+                         dashboardBody(uiOutput("MainBody"))
+
+           )
+           
+           
+  ),
+  
+  tabPanel("Info",
+           
+           fluidPage(
+             
+             h2("Introduction"),
+             
+             h4("This paper investigates the application of Natural Language 
+Processing as a means to study the relationship between
+topography and its visual renderings in early modern Japanese ukiyo-e landscape prints. 
+We introduce a new dataset with titles of landscape prints 
+that have been annotated by an art historian for any included place-names. 
+The prints are hosted by the digital database of the Art Research Center at 
+the Ritsumeikan University, Kyoto, one of the hubs of Digital Humanities in
+Japan. By applying, calibrating and assessing a Named Entity Recognition (NER) tool, 
+we argue that 'distant viewing' or macroanalysis of visual datasets can 
+be facilitated, which is needed to assist art historical studies of this rich, complex and
+diverse research material. "), 
+             
+             h2("Publications"),
+             
+             h4("M. Chatzipanagiotou, E.Machotka and J.Pavlopoulos. 'Automated recognition of geographical named entities in titles of Ukiyo-e prints', Workshop (publiced)"),
+             
+             h4("K. Liagkou, J.Pavlopoulos and E.Machotka. 'A Study of Distant 	Viewing of ukiyo-e prints', 13th Edition of its Language 		Resources and Evaluation Conference. 	
+             (submitted)"),
+             
+
+             
            )
            
            
   ),
 
-  #conditionalPanel("false", icon("crosshair"))
+  conditionalPanel("false", icon("crosshair"))
 )
