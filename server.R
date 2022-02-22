@@ -176,7 +176,7 @@ function(input, output, session) {
                   options = list(searchHighlight = TRUE, search = list(search = input$search)))
   }) 
   
-  ## Reannotate Prints ###########################################
+  ## Check Prints ###########################################
   
   # Initialize reactive values
   rv <- reactiveValues(prev_bins = NULL)
@@ -239,12 +239,12 @@ function(input, output, session) {
   output$Main_table<-renderDataTable({
     DT=dat
     
-    #DT[["Select"]]<-paste0('<input type="checkbox" name="row_selected" value="Row',1:nrow(vals$Data),'"><br>')
+    DT[["New Annotations"]]<- "-"
     
     DT[["Actions"]]<-
       paste0('
              <div class="btn-group" role="group" aria-label="Basic example">
-                <button type="button" class="btn btn-secondary modify"id=modify_',1:nrow(dat),'>Modify</button>
+                <button type="button" class="btn btn-secondary modify"id=modify_',1:nrow(dat),'>Annotate</button>
              </div>
              
              ')
@@ -252,90 +252,147 @@ function(input, output, session) {
               escape=F)}
   )
   
-## A] Managing in row deletion <-------
-  
-  modal_modify<-modalDialog(
-    fluidPage(
-      
-      h3(strong("Labeling modification"),align="center"),
-      hr(),
-      uiOutput('row_modif', align="center"),
-      
-      br(), br(),
-      
-      sidebarLayout(
-        sidebarPanel(
-          textInput("txtInput", "Input the place"),
-          actionButton("store", "Store")
-        ),                                          
-        uiOutput("valuePlace"),
-      ),
-      
-      actionButton("save_changes","Save changes"),
-
+        ## A] Managing in row deletion <-------
+          
+          modal_modify<-modalDialog(
+            fluidPage(
+              
+              h3(strong("Labeling modification"),align="center"),
+              hr(),
+              
+              # dataTableOutput('row_modif'),
+              uiOutput('row_modif', align="center"),
+              
+              br(), br(),
+              
+              sidebarLayout(
+                sidebarPanel(
+                  textInput("txtInput", "Input the place"),
+                  actionButton("store", "Store")
+                ),                                          
+                uiOutput("valuePlace"),
+                
+              ),
+              
+              actionButton("save_changes","Save annotations"),
         
-      #############################################################
+                
+              #############################################################
 
-      #      dataTableOutput('row_modif'),
+              #      tags$script(HTML("$(document).on('click', '#save_changes', function () {
+              #var list_value=[]
+              #for (i = 0; i < $( '.new_input' ).length; i++)
+              #                       {
+              #                          list_value.push($( '.new_input' )[i].value)
+              #                       }
+              #Shiny.onInputChange('newValue', list_value)
+              #  });"))
+              #############################################################
+        
+        
+            ),
+            size="l", 
+            footer = modalButton("Close")
+          )
+          
+          
+        ### Table auto complete from user Input with button Store  ###
+          
+          observeEvent(input$lastClick,
+                       {
+                         if (input$lastClickId%like%"modify"){
+                           showModal(modal_modify)
+                         }
+                       }
+          )
+        
+          
+        ### Print Title with the tags from the row we press button  ###
+          
+          output$row_modif<-renderUI({  
+            HTML(dat$Marked[as.numeric(gsub("modify_","",input$lastClickId))])
+          })
+          
+          
+        #########################################
+          
+          # Initialize reactive values
+          rv2 <- reactiveValues(prev_bins = NULL)
+          
+          # table for save id title and tag
+          rv <- reactiveValues(dfnew=data.frame(matrix(ncol = 2, nrow = 0)) ,count=1)
+          
+          # Press store
+          observeEvent(input$store, {
+            if(nchar(input$txtInput) > 0)  { # If user write input (anything), except nan
+                temp <- c(rv2$prev_bins, input$txtInput)
+                #rv2$prev_bins <- temp[!duplicated(temp)]
+                rv2$prev_bins <- temp
+                
+                rv$dfnew <- rbind(rv$dfnew, df_tags()) # table for save id title and tag
+            
+                
+                ###################### Table with New Annotations update ###################### 
+                #print('rv$dfnew')
+                #print(rv$dfnew)
+                
+                group_and_concat <- rv$dfnew %>%
+                  select(value, id_table) %>% 
+                  group_by(id_table) %>%
+                  summarise(all_names = paste(value, collapse = " | "))
+                group_and_concat <- group_and_concat[!duplicated(group_and_concat)]
+                
+                #print("group_and_concat")
+                #print(group_and_concat)
+                
+                output$Main_table<-renderDataTable({
+                          DT=dat
+                          DT[["New Annotations"]]<- "-"
 
-      
-      #      tags$script(HTML("$(document).on('click', '#save_changes', function () {
-      #var list_value=[]
-      #for (i = 0; i < $( '.new_input' ).length; i++)
-      #                       {
-      #                          list_value.push($( '.new_input' )[i].value)
-      #                       }
-      #Shiny.onInputChange('newValue', list_value)
-      #  });"))
-      #############################################################
+                          for(i in 1:nrow(group_and_concat)){
+                            row_update<-strtoi(group_and_concat[i,'id_table'])
+                            tag_update<-group_and_concat[i,'all_names']
+                            
+                            DT[["New Annotations"]][row_update]<- tag_update
+                          }
 
-
-    ),
-    size="l"
-  )
-  
-  
-### Table auto complete from user Input with button Store  ###
-  
-  observeEvent(input$lastClick,
-               {
-                 if (input$lastClickId%like%"modify"){
-                   showModal(modal_modify)
-                 }
-               }
-  )
-
-  
-### Print Title with the tags from the row we press button  ###
-  
-  output$row_modif<-renderUI({  
-    HTML(dat$Marked[as.numeric(gsub("modify_","",input$lastClickId))])
-  })
-  
-  
-#########################################
-  
-  # Initialize reactive values
-  rv2 <- reactiveValues(prev_bins = NULL)
-  
-  # Press store
-  observeEvent(input$store, {
-    temp <- c(rv2$prev_bins, input$txtInput)
-    rv2$prev_bins <- temp[!duplicated(temp)]
-  })
-  
-  # Output
-  output$valuePlace <- renderUI({ 
-    paste(rv2$prev_bins, collapse = ", ")
-  })
-  
-  
-  #output$value1 <- renderPrint({input$checked_rows})
-  
-  # Save the ids of wrong labels of print when press button save 
-  observeEvent(input$save_changes, {
-    write.xlsx(rv2$prev_bins, "wrong_labels.xlsx")
-  })
+                          DT[["Actions"]]<-
+                            paste0('<div class="btn-group" role="group" aria-label="Basic example">
+                                    <button type="button" class="btn btn-secondary modify"id=modify_',1:nrow(dat),'>Annotate</button>
+                                    </div>')
+                          datatable(DT,escape=F
+                        )})
+            } else {
+            }
+          })
+          
+        
+          df_tags <- reactive({
+            data.frame(
+              value = input$txtInput,
+              id_table = as.numeric(gsub("modify_","",input$lastClickId)) #input$lastClickId: Table id
+            )
+          })
+          
+        
+          # Output
+          output$valuePlace <- renderUI({ 
+            paste(rv2$prev_bins, collapse = ", ")
+          })
+          
+          #output$value1 <- renderPrint({input$checked_rows})
+          
+          # Save the ids of wrong labels of print when press button save 
+          observeEvent(input$save_changes, {
+            write.xlsx(rv$dfnew, "wrong_labels_per_row.xlsx")
+            
+            group_labes <- rv$dfnew %>%
+              select(value, id_table) %>% 
+              group_by(id_table) %>%
+              summarise(all_names = paste(value, collapse = " | "))
+            
+            write.xlsx(group_labes, "wrong_labels.xlsx")
+          })
   
 
   

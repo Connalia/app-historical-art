@@ -151,9 +151,36 @@ navbarPage("Ukiyo-e Prints", id="nav",
            
   ),
   
+  #################################
+  
+  
   tabPanel("Info",
            
            fluidPage(
+             
+             
+             
+             tags$head(
+               
+               #body {
+               #  background-color: black;
+               #  color: white;
+               #}
+               
+               #!Useful link for CSS and Shiny: https://shiny.rstudio.com/articles/css.html
+               
+               # Note the wrapping of the string in HTML()
+               tags$style(HTML("
+                    @import url('https://fonts.googleapis.com/css2?family=Yusei+Magic&display=swap');
+                    
+                    h2 {
+                      font-family: 'Yusei Magic', sans-serif;
+                    }
+                    
+                    .shiny-input-container {
+                      color: #474747;
+                    }"))
+             ),
              
              h2("Introduction"),
              
